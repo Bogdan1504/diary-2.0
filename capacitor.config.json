@@ -1,0 +1,9 @@
+{
+  "appId": "app.bogdan.readingdiary",
+  "appName": "Дневник чтения",
+  "webDir": "www",
+  "backgroundColor": "#ECEEE9",
+  "android": {
+    "allowMixedContent": false
+  }
+}
