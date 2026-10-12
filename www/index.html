@@ -173,6 +173,7 @@ textarea.inp{resize:vertical;line-height:1.45}
 <div class="scrim" id="scrim" hidden></div>
 <section class="sheet" id="sheet" role="dialog" aria-modal="true" hidden></section>
 <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+<input type="file" id="cover-file" accept="image/*" hidden>
 <input type="file" id="file" accept=".csv,.json,.txt,text/csv,application/json,text/plain" hidden>
 
 <script>
@@ -249,7 +250,7 @@ const stars = n => { let s = ''; for (let i = 1; i <= 5; i++) s += ico.star(i <=
 /* ---------- state ---------- */
 const KEY = 'readdiary.v1';
 const S = {
-  books: [], goal: 24, theme: 'auto',
+  books: [], goal: 24, theme: 'auto', gbKey: '',
   tab: 'books', filter: 'all', q: '', sort: 'updated', year: new Date().getFullYear(),
   sheet: null, draft: null, draftCover: undefined, ol: [], covers: {}, cb: {run: false, done: 0, total: 0, found: 0, stop: false}, wipe: false,
   imp: {mode: 'file', def: 'read', raw: null, fresh: null, dups: 0, err: '', text: ''}
@@ -258,7 +259,7 @@ function load() {
   try {
     const r = localStorage.getItem(KEY);
     if (r) { const d = JSON.parse(r); S.books = Array.isArray(d.books) ? d.books : [];
-      S.books.forEach(b => { if (b.note && !b.notes) b.notes = Object.assign(emptyNotes(), {personal: b.note}); delete b.note; }); S.goal = d.goal >= 0 ? d.goal : 24; S.theme = d.theme || 'auto'; }
+      S.books.forEach(b => { if (b.note && !b.notes) b.notes = Object.assign(emptyNotes(), {personal: b.note}); delete b.note; }); S.goal = d.goal >= 0 ? d.goal : 24; S.theme = d.theme || 'auto'; S.gbKey = d.gbKey || ''; }
   } catch (e) {}
 }
 const CKEY = 'readdiary.covers.v1';
@@ -273,7 +274,7 @@ function saveCovers() {
   try { localStorage.setItem(CKEY, JSON.stringify(S.covers)); return true; }
   catch (e) { toast('Память для обложек заполнена'); return false; }
 }
-function save() { try { localStorage.setItem(KEY, JSON.stringify({books: S.books, goal: S.goal, theme: S.theme})); } catch (e) {} }
+function save() { try { localStorage.setItem(KEY, JSON.stringify({books: S.books, goal: S.goal, theme: S.theme, gbKey: S.gbKey})); } catch (e) {} }
 
 /* ---------- toast ---------- */
 let toastTimer;
@@ -387,6 +388,8 @@ function viewMore() {
   return '<h1>Ещё</h1>' +
     '<div class="sec"><h2>Цель на год</h2><div class="setrow"><span>Книг в год<small>0 отключает цель</small></span><div class="step"><button class="icon" data-act="goal-" aria-label="Меньше">' + ico.minus + '</button><b>' + S.goal + '</b><button class="icon" data-act="goal+" aria-label="Больше">' + ico.plus + '</button></div></div></div>' +
     '<div class="sec"><h2>Тема</h2><div class="chips wrap" role="group">' + th.map(t => '<button class="chip" data-act="theme" data-v="' + t[0] + '" aria-pressed="' + (S.theme === t[0]) + '">' + t[1] + '</button>').join('') + '</div></div>' +
+    '<div class="sec"><h2>Поиск книг</h2><div class="field"><label for="gbkey">Ключ Google Books API (необязательно)</label><input id="gbkey" class="inp" autocomplete="off" autocapitalize="off" spellcheck="false" value="' + esc(S.gbKey) + '"></div>' +
+    '<p class="note" style="margin-top:0">Без ключа Google часто отвечает «превышен лимит запросов». Бесплатный ключ: console.cloud.google.com, создать проект, включить Books API, затем Credentials, Create credentials, API key.</p></div>' +
     '<div class="sec"><h2>Данные</h2>' +
     '<div class="setrow"><span>Импорт<small>Goodreads, CSV, JSON, список</small></span><button class="btn small" data-act="import">Импортировать</button></div>' +
     '<div class="setrow"><span>Обложки и страницы<small>' + (S.cb.run ? 'Ищу: ' + S.cb.done + ' из ' + S.cb.total + ', найдено ' + S.cb.found : 'Подтянуть из Open Library и Google Books') + '</small></span><button class="btn small" data-act="coverall">' + (S.cb.run ? 'Остановить' : 'Подтянуть') + '</button></div>' +
@@ -432,7 +435,7 @@ function notesHtml(d) {
 function bookSheet() {
   const d = S.draft, editing = !!S.sheet.id;
   return '<div class="sh-head"><h2>' + (editing ? 'Книга' : 'Новая книга') + '</h2><button class="icon" data-act="close" aria-label="Закрыть">' + ico.x + '</button></div>' +
-    '<div class="lookup"><div class="cover-lg" id="cover-prev">' + coverPrev() + '</div><div class="lk-btns"><button type="button" class="btn small" data-act="olfind">Найти по названию или ISBN</button><button type="button" class="btn small" data-act="scan">Сканировать ISBN</button></div></div>' +
+    '<div class="lookup"><div class="cover-lg" id="cover-prev" data-act="coverfile" role="button" tabindex="0" aria-label="Загрузить обложку">' + coverPrev() + '</div><div class="lk-btns"><button type="button" class="btn small" data-act="olfind">Найти по названию или ISBN</button><button type="button" class="btn small" data-act="scan">Сканировать ISBN</button><button type="button" class="btn small" data-act="coverfile">Загрузить обложку</button><button type="button" class="btn small danger" id="cover-del" data-act="coverdel"' + (hasCover() ? '' : ' hidden') + '>Убрать обложку</button></div></div>' +
     '<div class="olres" id="ol-res"></div>' +
     '<div class="field"><label for="f-title">Название</label><input id="f-title" class="inp" autocomplete="off" value="' + esc(d.title) + '"></div>' +
     '<div class="field"><label for="f-author">Автор</label><input id="f-author" class="inp" autocomplete="off" value="' + esc(d.author) + '"></div>' +
@@ -606,13 +609,50 @@ async function saveFile(name, mime, text) {
   setTimeout(() => URL.revokeObjectURL(a.href), 2000);
 }
 
+/* ---------- network ---------- */
+function nativeHttp() {
+  const C = window.Capacitor;
+  return C && C.isNativePlatform && C.isNativePlatform() && C.Plugins && C.Plugins.CapacitorHttp ? C.Plugins.CapacitorHttp : null;
+}
+async function getJSON(url) {
+  const H = nativeHttp();
+  if (H) {
+    let r = null;
+    try { r = await H.get({url, headers: {Accept: 'application/json'}}); } catch (e) { r = null; }
+    if (r) {
+      if (r.status >= 400) throw new Error('HTTP ' + r.status);
+      return typeof r.data === 'string' ? JSON.parse(r.data) : r.data;
+    }
+  }
+  const x = await fetch(url);
+  if (!x.ok) throw new Error('HTTP ' + (x.status || ''));
+  return x.json();
+}
+function b64ToBlob(b64, mime) {
+  const bin = atob(b64), u = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
+  return new Blob([u], {type: mime || 'image/jpeg'});
+}
+async function getBlob(url) {
+  const H = nativeHttp();
+  if (H) {
+    let r = null;
+    try { r = await H.get({url, responseType: 'blob'}); } catch (e) { r = null; }
+    if (r) {
+      if (r.status >= 400 || typeof r.data !== 'string') return null;
+      const h = r.headers || {};
+      return b64ToBlob(r.data, h['Content-Type'] || h['content-type']);
+    }
+  }
+  const x = await fetch(url);
+  return x.ok ? x.blob() : null;
+}
+
 /* ---------- Open Library ---------- */
 const OL_FIELDS = 'key,title,author_name,first_publish_year,number_of_pages_median,cover_i,isbn';
 async function olSearch(params) {
   const u = 'https://openlibrary.org/search.json?' + new URLSearchParams(Object.assign({fields: OL_FIELDS, limit: '8'}, params));
-  const r = await fetch(u);
-  if (!r.ok) throw new Error('http ' + r.status);
-  const d = await r.json();
+  const d = await getJSON(u);
   return (d.docs || []).map(x => {
     const isbns = x.isbn || [];
     return {title: x.title || '', author: (x.author_name || []).slice(0, 2).join(', '), year: x.first_publish_year || '',
@@ -626,10 +666,8 @@ async function gbSearch(q) {
   if (q.isbn) parts.push('isbn:' + q.isbn);
   else { if (q.title) parts.push('intitle:"' + q.title + '"'); if (q.author) parts.push('inauthor:"' + q.author + '"'); }
   if (!parts.length) return [];
-  const u = 'https://www.googleapis.com/books/v1/volumes?q=' + parts.map(encodeURIComponent).join('+') + '&maxResults=6&printType=books';
-  const r = await fetch(u);
-  if (!r.ok) throw new Error('http ' + r.status);
-  const d = await r.json();
+  const u = 'https://www.googleapis.com/books/v1/volumes?q=' + parts.map(encodeURIComponent).join('+') + '&maxResults=6&printType=books' + (S.gbKey ? '&key=' + encodeURIComponent(S.gbKey) : '');
+  const d = await getJSON(u);
   return (d.items || []).map(it => {
     const v = it.volumeInfo || {}, ids = v.industryIdentifiers || [], img = v.imageLinks || {};
     const id13 = ids.find(i => i.type === 'ISBN_13');
@@ -637,35 +675,67 @@ async function gbSearch(q) {
       pages: v.pageCount || 0, coverUrl: String(img.thumbnail || img.smallThumbnail || '').replace(/^http:/, 'https:'), isbn: id13 ? id13.identifier : '', src: 'gb'};
   }).filter(x => x.title);
 }
+function srcErr(e) {
+  const m = String(e && e.message || e);
+  if (/429/.test(m)) return 'превышен лимит запросов';
+  if (/403/.test(m)) return 'доступ запрещён';
+  if (/HTTP/.test(m)) return 'ошибка сервера (' + m + ')';
+  return 'нет связи';
+}
 async function lookup(q) {
-  let res = [], fails = 0;
+  let res = [], fails = 0; const info = [];
   try {
-    res = await olSearch(q.isbn ? {q: 'isbn:' + q.isbn, limit: '1'} : Object.assign({title: q.title, limit: '6'}, q.author ? {author: q.author} : {}));
-  } catch (e) { fails++; }
+    if (q.isbn) res = await olSearch({q: 'isbn:' + q.isbn, limit: '1'});
+    else {
+      res = await olSearch(Object.assign({title: q.title, limit: '6'}, q.author ? {author: q.author} : {}));
+      if (!res.length) res = await olSearch({q: [q.title, q.author].filter(Boolean).join(' '), limit: '6'});
+    }
+    info.push('Open Library: ' + (res.length ? 'найдено ' + res.length : 'ничего'));
+  } catch (e) { fails++; info.push('Open Library: ' + srcErr(e)); }
   if (q.isbn ? !res.length : res.length < 4) {
     try {
-      const have = new Set(res.map(r => norm(r.title) + '|' + norm(r.author)));
-      (await gbSearch(q)).forEach(x => { const k = norm(x.title) + '|' + norm(x.author); if (!have.has(k)) { have.add(k); res.push(x); } });
-    } catch (e) { fails++; }
+      const g = await gbSearch(q), have = new Set(res.map(r => norm(r.title) + '|' + norm(r.author)));
+      g.forEach(x => { const k = norm(x.title) + '|' + norm(x.author); if (!have.has(k)) { have.add(k); res.push(x); } });
+      info.push('Google Books: ' + (g.length ? 'найдено ' + g.length : 'ничего'));
+    } catch (e) {
+      fails++;
+      info.push('Google Books: ' + srcErr(e) + (/429|403/.test(String(e && e.message)) && !S.gbKey ? '. Нужен свой ключ: Ещё, раздел «Поиск книг»' : ''));
+    }
   }
-  if (!res.length && fails === 2) throw new Error('network');
-  return res;
+  if (!res.length && fails === 2) { const err = new Error('network'); err.info = info; throw err; }
+  res.info = info; return res;
+}
+const diagHtml = info => info && info.length ? '<p>' + info.map(esc).join('<br>') + '</p>' : '';
+async function shrinkBlob(blob, W) {
+  const bmp = await createImageBitmap(blob);
+  const H = Math.min(Math.round(W * 1.55), Math.round(bmp.height / bmp.width * W));
+  const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+  cv.getContext('2d').drawImage(bmp, 0, 0, W, H);
+  return cv.toDataURL('image/jpeg', 0.65);
 }
 async function fetchCover(url) {
   if (!url) return null;
+  let blob;
+  try { blob = await getBlob(url); } catch (e) { return url; }
+  if (!blob || blob.size < 800) return null;
+  try { return await shrinkBlob(blob, 110); } catch (e) { return url; }
+}
+const hasCover = () => S.draftCover !== undefined ? !!S.draftCover : !!(S.sheet && S.sheet.id && S.covers[S.sheet.id]);
+function refreshCover() {
+  const c = $('#cover-prev'); if (c) c.innerHTML = coverPrev();
+  const x = $('#cover-del'); if (x) x.hidden = !hasCover();
+}
+async function onCoverFile(f) {
   try {
-    const r = await fetch(url); if (!r.ok) return null;
-    const blob = await r.blob(); if (blob.size < 800) return null;
-    const bmp = await createImageBitmap(blob);
-    const W = 110, H = Math.min(170, Math.round(bmp.height / bmp.width * W));
-    const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
-    cv.getContext('2d').drawImage(bmp, 0, 0, W, H);
-    return cv.toDataURL('image/jpeg', 0.6);
-  } catch (e) { return /^https:\/\/(books|www)\.google|googleusercontent/.test(url) ? url : null; }
+    if (!f.type || !f.type.startsWith('image/')) throw new Error('type');
+    S.draftCover = await shrinkBlob(f, 140);
+    refreshCover();
+    toast('Обложка добавлена. Нажмите «Сохранить», чтобы оставить её');
+  } catch (e) { toast('Не удалось прочитать картинку. Подойдут JPG, PNG и WebP'); }
 }
 const validIsbn = v => /^97[89]\d{10}$/.test(v) || /^\d{9}[\dX]$/.test(v);
 function olResultsHtml(list) {
-  if (!list.length) return '<p>Ничего не нашлось ни в Open Library, ни в Google Books. Попробуйте изменить название или ввести ISBN, либо заполните поля вручную.</p>';
+  if (!list.length) return '<p>Ничего не нашлось. Попробуйте изменить название или ввести ISBN, либо заполните поля вручную.</p>' + diagHtml(list.info);
   return list.map((r, i) => '<button type="button" class="olr" data-act="olpick" data-i="' + i + '">' +
     (olCoverUrl(r, 'S') ? '<img alt="" loading="lazy" src="' + olCoverUrl(r, 'S') + '">' : '<span class="ph"></span>') +
     '<span><b>' + esc(r.title) + '</b><small>' + esc(r.author) + (r.year ? ', ' + r.year : '') + (r.pages ? ', ' + r.pages + ' стр.' : '') + '</small></span></button>').join('');
@@ -675,7 +745,7 @@ async function applyResult(r) {
   set('#f-title', r.title); set('#f-author', r.author); set('#f-isbn', r.isbn);
   if (r.pages && !(parseInt($('#f-pages').value) > 0)) $('#f-pages').value = r.pages;
   const c = await fetchCover(olCoverUrl(r, 'M'));
-  if (c && S.sheet && S.sheet.type === 'book') { S.draftCover = c; $('#cover-prev').innerHTML = coverPrev(); }
+  if (c && S.sheet && S.sheet.type === 'book') { S.draftCover = c; refreshCover(); }
   else if (!c) toast('Данные подставлены, обложки у этой книги нет');
 }
 async function scanIsbn() {
@@ -779,7 +849,7 @@ const A = {
     try {
       S.ol = await lookup({isbn: isbn && validIsbn(isbn) ? isbn : '', title: t, author: a});
       box.innerHTML = olResultsHtml(S.ol);
-    } catch (e) { box.innerHTML = '<p>Не удалось связаться с сервисами поиска. Проверьте интернет.</p>'; }
+    } catch (e) { box.innerHTML = '<p>Не удалось получить данные. Проверьте интернет.</p>' + diagHtml(e && e.info); }
   },
   async olpick(t) { const r = S.ol[+t.dataset.i]; if (!r) return; $('#ol-res').innerHTML = ''; await applyResult(r); },
   async scan() {
@@ -788,10 +858,12 @@ const A = {
     try {
       const list = await lookup({isbn: code});
       if (list.length) { box.innerHTML = ''; list[0].isbn = list[0].isbn || code; await applyResult(list[0]); }
-      else box.innerHTML = '<p>Книги с ISBN ' + esc(code) + ' нет ни в Open Library, ни в Google Books. ISBN сохранён, название и автора введите вручную.</p>';
-    } catch (e) { box.innerHTML = '<p>Не удалось связаться с Open Library. ISBN сохранён.</p>'; }
+      else box.innerHTML = '<p>Книги с ISBN ' + esc(code) + ' не нашлось. ISBN сохранён, название и автора введите вручную.</p>' + diagHtml(list.info);
+    } catch (e) { box.innerHTML = '<p>Не удалось получить данные. ISBN сохранён.</p>' + diagHtml(e && e.info); }
   },
   coverall() { coverAll(); },
+  coverfile() { const f = $('#cover-file'); f.value = ''; f.click(); },
+  coverdel() { S.draftCover = null; refreshCover(); },
   yprev() { S.year--; render(); },
   ynext() { S.year++; render(); },
   'goal-'() { S.goal = Math.max(0, S.goal - 1); save(); render(); },
@@ -834,15 +906,17 @@ document.addEventListener('keydown', e => {
 document.addEventListener('input', e => {
   if (e.target.id === 'q') { S.q = e.target.value; $('#list').innerHTML = listHtml(); }
   if (e.target.id === 'imp-text') S.imp.text = e.target.value;
+  if (e.target.id === 'gbkey') { S.gbKey = e.target.value.trim(); save(); }
 });
 document.addEventListener('change', e => {
   if (e.target.id === 'sort') { S.sort = e.target.value; $('#list').innerHTML = listHtml(); }
   if (e.target.id === 'imp-def') { S.imp.def = e.target.value; buildPreview(); renderSheet(); }
   if (e.target.id === 'file' && e.target.files && e.target.files[0]) onFile(e.target.files[0]);
+  if (e.target.id === 'cover-file' && e.target.files && e.target.files[0]) onCoverFile(e.target.files[0]);
 });
 
 load(); loadCovers(); render();
-window.__diary = {S, A, lookup, gbSearch, parseNotes, notesToText, NOTE_SECTIONS, olSearch, scanIsbn, coverAll, cleanIsbn, fromCSV, fromJSON, fromList, toCSV, parseCSV, mapStatus, parseDate};
+window.__diary = {S, A, onCoverFile, lookup, gbSearch, parseNotes, notesToText, NOTE_SECTIONS, olSearch, scanIsbn, coverAll, cleanIsbn, fromCSV, fromJSON, fromList, toCSV, parseCSV, mapStatus, parseDate};
 })();
 </script>
 </body>
